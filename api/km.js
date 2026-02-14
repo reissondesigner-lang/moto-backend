@@ -24,7 +24,8 @@ export default async function handler(req, res) {
 
     res.status(200).json({ km: mileage });
 
-  } catch (err) {
-    res.status(200).json({ error: true });
-  }
+  }catch (err) {
+  console.log("ERRO COMPLETO:", err.response?.data || err.message);
+  res.status(200).json({ error: true, details: err.response?.data || err.message });
+}
 }
