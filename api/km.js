@@ -1,38 +1,103 @@
-// api/km.js
 import axios from "axios";
 import CryptoJS from "crypto-js";
 
 export default async function handler(req, res) {
+  // ===== CORS CONFIG =====
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    "https://reissondesigner-lang.github.io"
+  );
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: true, message: "Method not allowed" });
+  }
+
   try {
+    // ===== ENV VARIABLES =====
     const account = process.env.PROTRACK_USER;
     const password = process.env.PROTRACK_PASS;
     const imei = process.env.PROTRACK_IMEI;
 
+    if (!account || !password || !imei) {
+      return res.status(500).json({
+        error: true,
+        message: "Missing environment variables"
+      });
+    }
+
+    // ===== GENERATE SIGNATURE =====
     const time = Math.floor(Date.now() / 1000).toString();
-    const md5Pass = CryptoJS.MD5(password).toString();
-    const signature = CryptoJS.MD5(md5Pass + time).toString();
+    const md5Password = CryptoJS.MD5(password).toString();
+    const signature = CryptoJS.MD5(md5Password + time).toString();
 
-    const authUrl = `https://api.protrack365.com/api/authorization?time=${time}&account=${account}&signature=${signature}`;
-    const auth = await axios.get(authUrl);
+    // ===== AUTH REQUEST =====
+    const authResponse = await axios.get(
+      `https://api.protrack365.com/api/authorization`,
+      {
+        params: {
+          time: time,
+          account: account,
+          signature: signature
+        }
+      }
+    );
 
-if (!auth.data || !auth.data.record || !auth.data.record.access_token) {
- return res.status(200).json({
-    error: true,
-    details: auth.data
-  });
-}
+    if (
+      !authResponse.data ||
+      !authResponse.data.record ||
+      !authResponse.data.record.access_token
+    ) {
+      return res.status(200).json({
+        error: true,
+        stage: "authorization",
+        details: authResponse.data
+      });
+    }
 
-const token = auth.data.record.access_token;
+    const token = authResponse.data.record.access_token;
 
-    const statusUrl = `https://api.protrack365.com/api/device/status?access_token=${token}&imeis=${imei}`;
-    const status = await axios.get(statusUrl);
+    // ===== DEVICE STATUS REQUEST =====
+    const statusResponse = await axios.get(
+      `https://api.protrack365.com/api/device/status`,
+      {
+        params: {
+          access_token: token,
+          imeis: imei
+        }
+      }
+    );
 
-    const mileage = status.data.record[0].mileage;
+    if (
+      !statusResponse.data ||
+      !statusResponse.data.record ||
+      !statusResponse.data.record[0] ||
+      typeof statusResponse.data.record[0].mileage === "undefined"
+    ) {
+      return res.status(200).json({
+        error: true,
+        stage: "device_status",
+        details: statusResponse.data
+      });
+    }
 
-    res.status(200).json({ km: mileage });
+    const mileage = statusResponse.data.record[0].mileage;
 
-  }catch (err) {
-  console.log("ERRO COMPLETO:", err.response?.data || err.message);
-  res.status(200).json({ error: true, details: err.response?.data || err.message });
-}
+    // ===== SUCCESS RESPONSE =====
+    return res.status(200).json({
+      km: Number(mileage)
+    });
+
+  } catch (error) {
+    return res.status(200).json({
+      error: true,
+      stage: "exception",
+      details: error.response?.data || error.message
+    });
+  }
 }
