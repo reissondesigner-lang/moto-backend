@@ -16,10 +16,7 @@ export default async function handler(req, res) {
     const auth = await axios.get(authUrl);
 
 if (!auth.data || !auth.data.record || !auth.data.record.access_token) {
-  return res.status(200).json({
-    error: true,
-    details: auth.data
-  });
+  return res.json(auth.data);
 }
 
 const token = auth.data.record.access_token;
