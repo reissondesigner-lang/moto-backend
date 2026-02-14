@@ -15,7 +15,14 @@ export default async function handler(req, res) {
     const authUrl = `https://api.protrack365.com/api/authorization?time=${time}&account=${account}&signature=${signature}`;
     const auth = await axios.get(authUrl);
 
-    const token = auth.data.record.access_token;
+if (!auth.data || !auth.data.record || !auth.data.record.access_token) {
+  return res.status(200).json({
+    error: true,
+    details: auth.data
+  });
+}
+
+const token = auth.data.record.access_token;
 
     const statusUrl = `https://api.protrack365.com/api/device/status?access_token=${token}&imeis=${imei}`;
     const status = await axios.get(statusUrl);
